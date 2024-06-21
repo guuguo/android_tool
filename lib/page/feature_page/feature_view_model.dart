@@ -1,7 +1,10 @@
 import 'package:android_tool/page/common/app.dart';
 import 'package:android_tool/page/common/base_view_model.dart';
+import 'package:android_tool/page/common/key_code.dart';
+import 'package:android_tool/page/common/package_help_mixin.dart';
 import 'package:android_tool/widget/input_dialog.dart';
 import 'package:android_tool/widget/list_filter_dialog.dart';
+import 'package:android_tool/widget/remote_control_dialog.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -9,25 +12,63 @@ import 'package:flutter/services.dart';
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:process_run/shell_run.dart';
 
-class FeatureViewModel extends BaseViewModel {
+class FeatureViewModel extends BaseViewModel with PackageHelpMixin {
   String deviceId;
-  String packageName;
+
+  List<Color> colors = [
+    Colors.red,
+    Colors.orange,
+    Colors.lightBlue,
+    Colors.green,
+    Colors.amber,
+    Colors.blue,
+    Colors.purple,
+    Colors.indigo,
+    Colors.blueGrey,
+    Colors.indigoAccent,
+    Colors.brown,
+    Colors.cyan,
+    Colors.lightGreen,
+    Colors.orangeAccent,
+    Colors.deepPurpleAccent,
+  ];
 
   FeatureViewModel(
     BuildContext context,
     this.deviceId,
-    this.packageName,
   ) : super(context) {
-    App().getAdbPath().then((value) => adbPath = value);
-    App().eventBus.on<DeviceIdEvent>().listen((event) {
+    App().eventBus.on<DeviceIdEvent>().listen((event) async {
       deviceId = event.deviceId;
-    });
-    App().eventBus.on<PackageNameEvent>().listen((event) {
-      packageName = event.packageName;
+      if (deviceId.isEmpty) {
+        resetPackage();
+        return;
+      }
+      await getInstalledApp(deviceId);
     });
     App().eventBus.on<AdbPathEvent>().listen((event) {
       adbPath = event.path;
     });
+    App().eventBus.on<String>().listen((event) {
+      if (event == "refresh") {
+        getInstalledApp(deviceId);
+      }
+    });
+  }
+
+  Future<void> init() async {
+    adbPath = await App().getAdbPath();
+    getInstalledApp(deviceId);
+  }
+
+  /// 选择调试应用
+  packageSelect(BuildContext context) async {
+    await getInstalledApp(deviceId);
+    var value = await showPackageSelect(context, deviceId);
+    if (value.isNotEmpty) {
+      packageName = value;
+      App().setPackageName(packageName);
+      notifyListeners();
+    }
   }
 
   /// 选择文件安装应用
@@ -39,6 +80,9 @@ class FeatureViewModel extends BaseViewModel {
 
   /// 卸载应用
   void uninstallApk() async {
+    bool isConfirm = await showTipsDialog("确定卸载应用？") ?? false;
+    if (!isConfirm) return;
+
     var result = await execAdb([
       '-s',
       deviceId,
@@ -122,6 +166,9 @@ class FeatureViewModel extends BaseViewModel {
 
   /// 清除数据
   Future<void> clearAppData() async {
+    bool isConfirm = await showTipsDialog("确定清除App数据？") ?? false;
+    if (!isConfirm) return;
+
     await execAdb([
       '-s',
       deviceId,
@@ -249,14 +296,28 @@ class FeatureViewModel extends BaseViewModel {
   Future<void> screenshot() async {
     var path = await getDirectoryPath();
     if (path == null || path.isEmpty) return;
+    await execAdb([
+      '-s',
+      deviceId,
+      'shell',
+      'screencap',
+      '-p',
+      '/sdcard/screenshot.png',
+    ]);
     var result = await execAdb([
       '-s',
       deviceId,
-      'exec-out',
-      'screencap',
-      '-p',
-      '>',
+      'pull',
+      '/sdcard/screenshot.png',
       '$path/screenshot${DateTime.now().millisecondsSinceEpoch}.png',
+    ]);
+    await execAdb([
+      '-s',
+      deviceId,
+      'shell',
+      'rm',
+      '-rf',
+      '/sdcard/screenshot.png',
     ]);
 
     if (result != null && result.exitCode == 0) {
@@ -396,13 +457,24 @@ class FeatureViewModel extends BaseViewModel {
 
   /// 查看设备Mac地址
   Future<void> getDeviceMac() async {
+    // 感谢简书网友：北京朝阳区精神病院院长 的分享BUG以及优化方案。
+    // 查看设备Mac地址
+    // 提供两种获取 设备Mac方法
+    // adb shell ip address show wlan0 | grep "link/ether" | awk '{printf $2}'
+    // adb -s deviceId shell "ip addr show wlan0 | grep 'link/ether '| cut -d' ' -f6"
     var result = await execAdb([
       '-s',
       deviceId,
       'shell',
-      'cat',
-      '/sys/class/net/wlan0/address',
+      "ip addr show wlan0 | grep 'link/ether '| cut -d' ' -f6",
     ]);
+    // var result = await execAdb([
+    //   '-s',
+    //   deviceId,
+    //   'shell',
+    //   'cat',
+    //   '/sys/class/net/wlan0/address',
+    // ]);
     showResultDialog(
       content: result != null && result.exitCode == 0 ? result.stdout : "获取失败",
     );
@@ -434,20 +506,20 @@ class FeatureViewModel extends BaseViewModel {
     } else {
       var list = outLines.toList();
       list.sort((a, b) => a.compareTo(b));
-      var controller = ListFilterController();
-      controller.show(
+      ListFilterController<ListFilterItem> controller =
+          ListFilterController<ListFilterItem>();
+      var value = await controller.show(
         context,
-        list,
-        "",
+        list.map((e) => ListFilterItem(e)).toList(),
+        ListFilterItem(""),
         title: "系统属性列表",
         tipText: "请输入需要筛选的属性",
         notFoundText: "没有找到相关属性",
-        itemClickCallback: (context, value) {
-          Navigator.pop(context);
-          Clipboard.setData(ClipboardData(text: value));
-          showResultDialog(content: "已复制到剪切板");
-        },
       );
+      if (value != null) {
+        Clipboard.setData(ClipboardData(text: value.itemTitle));
+        showResultDialog(content: "已复制到剪切板");
+      }
     }
   }
 
@@ -603,7 +675,7 @@ class FeatureViewModel extends BaseViewModel {
       'input',
       'swipe',
       '300',
-      '1000',
+      '1300',
       '300',
       '300',
     ]);
@@ -620,7 +692,7 @@ class FeatureViewModel extends BaseViewModel {
       '300',
       '300',
       '300',
-      '1000',
+      '1300',
     ]);
   }
 
@@ -632,9 +704,9 @@ class FeatureViewModel extends BaseViewModel {
       'shell',
       'input',
       'swipe',
-      '700',
+      '900',
       '300',
-      '300',
+      '100',
       '300',
     ]);
   }
@@ -647,10 +719,37 @@ class FeatureViewModel extends BaseViewModel {
       'shell',
       'input',
       'swipe',
+      '100',
       '300',
-      '300',
-      '700',
+      '900',
       '300',
     ]);
+  }
+
+  /// 遥控器按键事件
+  void pressRemoteKey(KeyCode keyCode) async {
+    await execAdb([
+      '-s',
+      deviceId,
+      'shell',
+      'input',
+      'keyevent',
+      keyCode.value.toString(),
+    ]);
+  }
+
+  Color getColor(String name) {
+    return colors[name.hashCode % colors.length];
+  }
+
+  void showRemoteControlDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return RemoteControlDialog(
+          onTap: pressRemoteKey,
+        );
+      },
+    );
   }
 }

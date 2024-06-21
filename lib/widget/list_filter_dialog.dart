@@ -1,18 +1,19 @@
+import 'package:android_tool/page/common/package_help_mixin.dart';
 import 'package:android_tool/widget/text_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:selector_plus/selector_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-typedef ItemClickCallback = void Function(BuildContext context, String value);
-
-class ListFilterDialog extends StatefulWidget {
+class ListFilterDialog<T extends ListFilterItem> extends StatefulWidget {
   final ListFilterController controller;
 
   final String? title;
   final String? tipText;
   final String? notFoundText;
-  final ItemClickCallback? itemClickCallback;
+  final bool isSelectApp;
+  final Function()? refreshCallback;
 
   const ListFilterDialog({
     Key? key,
@@ -20,15 +21,16 @@ class ListFilterDialog extends StatefulWidget {
     this.title,
     this.tipText,
     this.notFoundText,
-    this.itemClickCallback,
+    this.isSelectApp = false,
+    this.refreshCallback,
   }) : super(key: key);
 
   @override
-  State<ListFilterDialog> createState() =>
-      _ListFilterDialogState();
+  State<ListFilterDialog> createState() => _ListFilterDialogState<T>();
 }
 
-class _ListFilterDialogState extends State<ListFilterDialog> {
+class _ListFilterDialogState<T extends ListFilterItem>
+    extends State<ListFilterDialog> {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
@@ -50,9 +52,31 @@ class _ListFilterDialogState extends State<ListFilterDialog> {
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     const SizedBox(height: 10),
-                    TextView(
-                      widget.title ?? "请选择调试的应用包名",
-                      fontSize: 17,
+                    Stack(
+                      children: [
+                        Container(
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          width: double.infinity,
+                          child: TextView(
+                            widget.title ?? "请选择调试的应用包名",
+                            fontSize: 17,
+                          ),
+                        ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: TextButton(
+                            child: const TextView(
+                              "刷新",
+                              fontSize: 12,
+                            ),
+                            onPressed: () {
+                              widget.refreshCallback?.call();
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 20),
                     Padding(
@@ -65,7 +89,7 @@ class _ListFilterDialogState extends State<ListFilterDialog> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    SelectorListPlus<ListFilterController, String>(
+                    SelectorListPlus<ListFilterController, ListFilterItem>(
                       builder: (context, value, child) {
                         return SizedBox(
                           height: MediaQuery.of(context).size.height * 0.55,
@@ -81,23 +105,22 @@ class _ListFilterDialogState extends State<ListFilterDialog> {
                                 );
                               }
                               return ListTile(
-                                trailing:
-                                    value[index] == widget.controller.current
-                                        ? const Icon(
-                                            Icons.check,
-                                            color: Colors.blue,
-                                          )
-                                        : null,
+                                trailing: value[index].itemTitle ==
+                                        widget.controller.current?.itemTitle
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: Colors.blue,
+                                      )
+                                    : null,
                                 title: TextView(
-                                  value[index],
-                                  color:
-                                      value[index] == widget.controller.current
-                                          ? Colors.blue
-                                          : null,
+                                  value[index].itemTitle,
+                                  color: value[index].itemTitle ==
+                                          widget.controller.current?.itemTitle
+                                      ? Colors.blue
+                                      : null,
                                 ),
                                 onTap: () {
-                                  widget.itemClickCallback
-                                      ?.call(context, value[index]);
+                                  Navigator.of(context).pop(value[index]);
                                 },
                               );
                             },
@@ -107,6 +130,10 @@ class _ListFilterDialogState extends State<ListFilterDialog> {
                       },
                       selector: widget.controller.selectorList,
                     ),
+                    Offstage(
+                      offstage: !widget.isSelectApp,
+                      child: _buildShowSelectSystemAppView(),
+                    ),
                   ],
                 ),
               ),
@@ -114,16 +141,45 @@ class _ListFilterDialogState extends State<ListFilterDialog> {
           );
         });
   }
+
+  Widget _buildShowSelectSystemAppView() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        const TextView("显示系统应用"),
+        Selector<ListFilterController, bool>(
+          selector: (context, controller) => controller._isShowSystemApp,
+          builder: (context, isFilter, child) {
+            return Checkbox(
+              value: isFilter,
+              onChanged: (value) async {
+                await widget.controller._setShowSystemApp(value ?? false);
+                widget.refreshCallback?.call();
+              },
+            );
+          },
+        )
+      ],
+    );
+  }
 }
 
-class ListFilterController extends ChangeNotifier {
-  final SelectorListPlusData<String> selectorList = SelectorListPlusData();
+class ListFilterItem {
+  String itemTitle;
+
+  ListFilterItem(this.itemTitle);
+}
+
+class ListFilterController<T extends ListFilterItem> extends ChangeNotifier {
+  final SelectorListPlusData<T> selectorList = SelectorListPlusData();
 
   final TextEditingController controller = TextEditingController();
 
-  List<String> dataList = [];
+  List<T> dataList = [];
 
-  String current = "";
+  T? current;
+
+  bool _isShowSystemApp = false;
 
   ListFilterController() {
     controller.addListener(() {
@@ -133,33 +189,65 @@ class ListFilterController extends ChangeNotifier {
         return;
       }
       var list = dataList
-          .where((element) => element.contains(controller.text))
+          .where((element) => element.itemTitle.contains(controller.text))
           .toList();
       selectorList.value = list;
       notifyListeners();
     });
   }
 
-  Future<String?> show(
+  Future<T?> show(
     BuildContext context,
-    List<String> data,
-    String pkg, {
+    List<T> data,
+    T? current, {
     String? title,
     String? tipText,
     String? notFoundText,
-    ItemClickCallback? itemClickCallback,
+    bool isSelectApp = false,
+    Function()? refreshCallback,
   }) async {
     dataList = data;
     selectorList.value = data;
-    current = pkg;
-    return await showDialog<String>(
+    this.current = current;
+    if (isSelectApp) {
+      _getIsShowSystemApp();
+    }
+    return await showDialog<T>(
       context: context,
       builder: (context) => ListFilterDialog(
-          controller: this,
-          title: title,
-          tipText: tipText,
-          notFoundText: notFoundText,
-          itemClickCallback: itemClickCallback),
+        controller: this,
+        title: title,
+        tipText: tipText,
+        notFoundText: notFoundText,
+        isSelectApp: isSelectApp,
+        refreshCallback: refreshCallback,
+      ),
     );
+  }
+
+  void setData(List<T> data, {T? current}) {
+    if (current != null) {
+      this.current = current;
+    }
+    dataList = data;
+    selectorList.value = dataList
+        .where((element) => element.itemTitle.contains(controller.text))
+        .toList();
+    notifyListeners();
+  }
+
+  _setShowSystemApp(bool bool) async {
+    _isShowSystemApp = bool;
+    notifyListeners();
+    var prefs = await SharedPreferences.getInstance();
+    prefs.setBool(PackageHelpMixin.isShowSystemApp, bool);
+  }
+
+  void _getIsShowSystemApp() {
+    SharedPreferences.getInstance().then((value) {
+      _isShowSystemApp =
+          value.getBool(PackageHelpMixin.isShowSystemApp) ?? false;
+      notifyListeners();
+    });
   }
 }

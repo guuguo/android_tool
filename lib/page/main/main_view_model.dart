@@ -3,48 +3,35 @@ import 'dart:io';
 import 'package:android_tool/page/common/app.dart';
 import 'package:android_tool/page/common/base_view_model.dart';
 import 'package:android_tool/widget/list_filter_dialog.dart';
-import 'package:android_tool/widget/pop_up_menu_button.dart';
 import 'package:archive/archive_io.dart';
 import 'package:desktop_drop/src/drop_target.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:process_run/shell.dart';
 
-import '../../widget/adb_setting_dialog.dart';
 import 'devices_model.dart';
 
 class MainViewModel extends BaseViewModel {
-  PopUpMenuButtonViewModel<DevicesModel> devicesViewModel =
-      PopUpMenuButtonViewModel();
+  ListFilterController<DevicesModel> devicesController = ListFilterController();
 
-  ListFilterController packageNameController =
-      ListFilterController();
+  List<DevicesModel> devicesList = [];
+  DevicesModel? device;
 
-  List<String> packageNameList = [];
-  String packageName = "";
+  int selectedIndex = -1;
 
-  MainViewModel(context) : super(context) {
-    devicesViewModel.addListener(() {
-      if (devicesViewModel.selectValue != null) {
-        App().setDeviceId(deviceId);
-        getInstalledApp(deviceId);
-      }
-    });
-    App().eventBus.on<String>().listen((event) {
-      if (event == "refresh") {
-        getInstalledApp(deviceId);
-      }
-    });
-  }
+  MainViewModel(context) : super(context);
 
-  String get deviceId => devicesViewModel.selectValue?.id ?? "";
+  String get deviceId => device?.id ?? "";
 
   init() async {
     await checkAdb();
     if (adbPath.isNotEmpty) {
       await getDeviceList();
+      selectedIndex = 1;
+      notifyListeners();
     }
   }
 
@@ -122,7 +109,7 @@ class MainViewModel extends BaseViewModel {
       clearData();
       return;
     }
-    List<DevicesModel> list = [];
+    devicesList.clear();
     for (var value in devices.outLines) {
       if (value.contains("List of devices attached")) {
         continue;
@@ -135,24 +122,23 @@ class MainViewModel extends BaseViewModel {
         var device = deviceLine[0];
         var brand = await getBrand(device);
         var model = await getModel(device);
-        list.add(DevicesModel(brand, model, device));
+        devicesList.add(DevicesModel(brand, model, device));
       }
     }
-    if (list.isEmpty) {
+    if (devicesList.isEmpty) {
       clearData();
       return;
     } else {
-      App().getDeviceId().then((value) {
-        if (value.isNotEmpty) {
-          devicesViewModel.selectValue = list.firstWhere(
-              (element) => element.id == value,
-              orElse: () => list.first);
-        } else {
-          devicesViewModel.selectValue = list.first;
-        }
-      });
+      var value = await App().getDeviceId();
+      if (value.isNotEmpty) {
+        device = devicesList.firstWhere((element) => element.id == value,
+            orElse: () => devicesList.first);
+      } else {
+        device = devicesList.first;
+      }
+      App().setDeviceId(deviceId);
     }
-    devicesViewModel.list = list;
+    devicesController.setData(devicesList);
   }
 
   /// 获取设备品牌
@@ -181,50 +167,31 @@ class MainViewModel extends BaseViewModel {
     }
   }
 
-  /// 获取已安装的应用
-  Future<void> getInstalledApp(String devices) async {
-    var installedApp =
-        await execAdb(['-s', devices, 'shell', 'pm', 'list', 'packages', '-3']);
-    if (installedApp == null) return;
-    var outLines = installedApp.outLines;
-    packageNameList = outLines.map((e) {
-      return e.replaceAll("package:", "");
-    }).toList();
-    packageNameList.sort((a, b) => a.compareTo(b));
-    if (packageNameList.isNotEmpty) {
-      App().getPackageName().then((value) {
-        if (value.isNotEmpty) {
-          packageName = packageNameList.firstWhere(
-              (element) => element == value,
-              orElse: () => packageNameList.first);
-        } else {
-          packageName = packageNameList.first;
-        }
-      });
-    }
-  }
-
   // void getClipboardText() async {
   //   var clipboardText = await execAdb(['shell', 'am', 'broadcast', '-a', 'clipper.get']);
   //   print(clipboardText.outLines);
   // }
 
-  /// 选择调试应用
-  packageSelect(BuildContext context) async {
-    if (packageNameList.isEmpty) {
+  /// 选择设备
+  Future<void> devicesSelect(BuildContext context) async {
+    await getDeviceList();
+    if (devicesList.isEmpty) {
       return;
     }
-    packageNameController.show(
+    var value = await devicesController.show(
       context,
-      packageNameList,
-      packageName,
-      itemClickCallback: (context, value) {
-        packageName = value;
-        App().setPackageName(packageName);
-        notifyListeners();
-        Navigator.of(context).pop();
+      devicesList,
+      device,
+      refreshCallback: () {
+        getDeviceList();
       },
     );
+    if (value != null) {
+      device = value;
+      App().setDeviceId(deviceId);
+
+      notifyListeners();
+    }
   }
 
   void onDragDone(DropDoneDetails details) {
@@ -240,18 +207,14 @@ class MainViewModel extends BaseViewModel {
   }
 
   void clearData() {
-    devicesViewModel.selectValue = null;
-    devicesViewModel.list.clear();
-    packageName = "";
-    packageNameList.clear();
+    device = null;
+    devicesList.clear();
+    devicesController.setData([]);
+    App().setDeviceId("");
   }
 
-  void showAdbPath() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AdbSettingDialog(adbPath);
-      },
-    );
+  void onLeftItemClick(int index) {
+    selectedIndex = index;
+    notifyListeners();
   }
 }

@@ -1,9 +1,10 @@
-import 'package:android_tool/widget/pop_up_menu_button.dart';
+import 'package:android_tool/widget/list_filter_dialog.dart';
 
-class DevicesModel extends PopUpMenuItem {
+class DevicesModel extends ListFilterItem {
   String brand;
   String model;
   String id;
 
-  DevicesModel(this.brand, this.model, this.id) : super(brand + " " + model);
+  DevicesModel(this.brand, this.model, this.id)
+      : super(brand + " " + model + " " + id);
 }
