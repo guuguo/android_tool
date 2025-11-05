@@ -80,7 +80,7 @@ class _LoadingOverlayState extends State<LoadingOverlay>
             Opacity(
               child: ModalBarrier(
                 dismissible: false,
-                color: widget.color ?? Theme.of(context).colorScheme.background,
+                color: widget.color ?? Theme.of(context).colorScheme.surface,
               ),
               opacity: widget.opacity,
             ),

@@ -95,7 +95,7 @@ class _AdbSettingDialogState extends State<AdbSettingDialog> {
                       height: 30,
                       child: OutlinedButton(
                         style: ButtonStyle(
-                          side: MaterialStateProperty.all(
+                          side: WidgetStateProperty.all(
                               const BorderSide(color: Colors.grey)),
                         ),
                         onPressed: () {

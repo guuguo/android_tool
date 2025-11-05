@@ -1,13 +1,17 @@
 import Cocoa
 import FlutterMacOS
 
-@NSApplicationMain
+@main
 class AppDelegate: FlutterAppDelegate {
     override func applicationDidBecomeActive(_ notification: Notification) {
         signal(SIGPIPE, SIG_IGN) //Ignore signal
     }
     
     override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return true
+    }
+    
+    override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         return true
     }
 }

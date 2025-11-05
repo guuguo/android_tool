@@ -37,7 +37,7 @@ class _MainPageState extends BasePage<MainPage, MainViewModel> {
             viewModel.onDragDone(details);
           },
           child: Container(
-            color: Colors.blue.withOpacity(0.05),
+            color: Colors.blue.withValues(alpha: 0.05),
             width: 200,
             child: Column(
               children: [
@@ -105,7 +105,7 @@ class _MainPageState extends BasePage<MainPage, MainViewModel> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             color: index == viewModel.selectedIndex
-                ? Colors.blue.withOpacity(0.32)
+                ? Colors.blue.withValues(alpha: 0.32)
                 : Colors.transparent,
           ),
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 15),

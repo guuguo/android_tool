@@ -16,10 +16,10 @@ class RemoteControlDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      content: RawKeyboardListener(
+      content: KeyboardListener(
         focusNode: FocusNode(),
         autofocus: true,
-        onKey: keyboardListener,
+        onKeyEvent: keyboardListener,
         child: Stack(
           children: [
             buildCloseView(context),
@@ -199,7 +199,7 @@ class RemoteControlDialog extends StatelessWidget {
   }
 
   void keyboardListener(event) {
-    if (event.runtimeType == RawKeyUpEvent) {
+    if (event.runtimeType == KeyUpEvent) {
       if (event.physicalKey == PhysicalKeyboardKey.arrowUp) {
         _onTapKey(KeyCode.dpadUp);
       } else if (event.physicalKey == PhysicalKeyboardKey.arrowDown) {

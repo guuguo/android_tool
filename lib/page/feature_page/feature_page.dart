@@ -523,8 +523,8 @@ class _FeaturePageState extends BasePage<FeaturePage, FeatureViewModel> {
                     borderRadius: BorderRadius.circular(15),
                     gradient: LinearGradient(
                       colors: [
-                        color.withOpacity(0.5),
-                        color.withOpacity(1),
+                        color.withValues(alpha: 0.5),
+                        color.withValues(alpha: 1.0),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,

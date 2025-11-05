@@ -178,45 +178,47 @@ class _AndroidLogPageState
         color: const Color(0xFFF0F0F0),
         child: Consumer<AndroidLogViewModel>(
           builder: (context, viewModel, child) {
-            return FlutterListView(
-              controller: viewModel.scrollController,
-              delegate: FlutterListViewDelegate(
-                (context, index) {
-                  var log = viewModel.logList[index];
-                  Color textColor = viewModel.getLogColor(log);
-                  return Listener(
-                    onPointerDown: (event) {
-                      if (event.kind == PointerDeviceKind.mouse &&
-                          event.buttons == kSecondaryMouseButton) {
-                        viewModel.copyLog(log);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 3, horizontal: 15),
-                      child: SubstringHighlight(
-                        text: log,
-                        textStyle: TextStyle(
-                          color: textColor,
+            return SelectionArea(
+              child: FlutterListView(
+                controller: viewModel.scrollController,
+                delegate: FlutterListViewDelegate(
+                  (context, index) {
+                    var log = viewModel.logList[index];
+                    Color textColor = viewModel.getLogColor(log);
+                    return Listener(
+                      onPointerDown: (event) {
+                        if (event.kind == PointerDeviceKind.mouse &&
+                            event.buttons == kSecondaryMouseButton) {
+                          viewModel.copyLog(log);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 3, horizontal: 15),
+                        child: SubstringHighlight(
+                          text: log,
+                          textStyle: TextStyle(
+                            color: textColor,
+                          ),
+                          textStyleHighlight: TextStyle(
+                            color: viewModel.findIndex == index
+                                ? Colors.white
+                                : textColor,
+                            backgroundColor: viewModel.findIndex == index
+                                ? Colors.red
+                                : Colors.yellowAccent,
+                            fontWeight: viewModel.findIndex == index
+                                ? FontWeight.bold
+                                : null,
+                          ),
+                          caseSensitive: viewModel.isCaseSensitive,
+                          term: viewModel.findController.text,
                         ),
-                        textStyleHighlight: TextStyle(
-                          color: viewModel.findIndex == index
-                              ? Colors.white
-                              : textColor,
-                          backgroundColor: viewModel.findIndex == index
-                              ? Colors.red
-                              : Colors.yellowAccent,
-                          fontWeight: viewModel.findIndex == index
-                              ? FontWeight.bold
-                              : null,
-                        ),
-                        caseSensitive: viewModel.isCaseSensitive,
-                        term: viewModel.findController.text,
                       ),
-                    ),
-                  );
-                },
-                childCount: viewModel.logList.length,
+                    );
+                  },
+                  childCount: viewModel.logList.length,
+                ),
               ),
             );
           },
@@ -234,7 +236,7 @@ class _AndroidLogPageState
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: Colors.black.withOpacity(0.5)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.5)),
         ),
         height: 33,
         child: Row(
